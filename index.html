@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Make a QR code in your browser. Nothing is uploaded.">
+    <meta name="theme-color" content="#ebe6dc" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)">
+    <title>QRmaxx</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231b1814'/%3E%3Cpath fill='%23f7f4ee' fill-rule='evenodd' d='M2 2h5v5H2V2zm1 1v3h3V3H3zM9 2h5v5H9V2zm1 1v3h3V3h-3zM2 9h5v5H2V9zm1 1v3h3v-3H3zM9 9h2v2H9V9zm3 0h2v2h-2V9zM9 12h2v2H9v-2zm3 2h2v2h-2v-2z'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>
+          <svg class="logo" viewBox="0 0 10 10" aria-hidden="true">
+            <path fill="currentColor" fill-rule="evenodd" d="M0 0h10v10H0V0zm1.55 1.55v6.9h6.9v-6.9h-6.9z"/>
+            <rect x="3.15" y="3.15" width="3.7" height="3.7" fill="currentColor"/>
+          </svg>
+          QRmaxx
+        </h1>
+        <p>Type a link or a message. The code is drawn on this page, and your text stays in this browser.</p>
+      </header>
+
+      <label class="field">
+        <span class="field-label">Text or link</span>
+        <textarea
+          id="input"
+          rows="2"
+          placeholder="https://example.com"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          autofocus
+        ></textarea>
+      </label>
+
+      <div class="result">
+        <div class="stage" id="stage">
+          <p class="empty">The code appears as you type.</p>
+        </div>
+        <p class="meta" id="meta"></p>
+        <p class="warn" id="warn" role="status"></p>
+        <div class="actions">
+          <button class="primary" id="download" type="button" disabled>Download PNG</button>
+          <button class="ghost" id="copy" type="button" disabled>Copy image</button>
+        </div>
+      </div>
+
+      <div class="options">
+        <fieldset>
+          <legend>Correction</legend>
+          <div class="segmented">
+            <label class="seg">
+              <input type="radio" name="ecc" value="low">
+              <span>Low</span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="ecc" value="medium" checked>
+              <span>Medium</span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="ecc" value="high">
+              <span>High</span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="ecc" value="max">
+              <span>Max</span>
+            </label>
+          </div>
+          <p class="hint" id="ecc-hint"></p>
+        </fieldset>
+
+        <div class="colors">
+          <label class="color">
+            <span>Ink</span>
+            <input id="ink" type="color" value="#1b1814" aria-label="Ink color">
+          </label>
+          <label class="color">
+            <span>Background</span>
+            <input id="paper" type="color" value="#ffffff" aria-label="Background color">
+          </label>
+        </div>
+
+        <div class="size">
+          <label class="size-label" for="size">Image size</label>
+          <div class="size-control">
+            <input id="size" type="number" min="32" max="8192" step="1" value="1024" inputmode="numeric" aria-describedby="size-hint">
+            <span>px</span>
+          </div>
+        </div>
+        <p class="hint" id="size-hint"></p>
+      </div>
+    </main>
+
+    <noscript>
+      <p>QRmaxx needs JavaScript to draw the code. It still runs entirely in your browser.</p>
+    </noscript>
+    <script src="vendor/qrcodegen.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
