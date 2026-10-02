@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Make a QR code in your browser. Nothing is uploaded.">
+    <meta name="description" content="Make a QR code or a barcode in your browser. Nothing is uploaded.">
     <meta name="theme-color" content="#ebe6dc" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)">
     <title>QRmaxx</title>
@@ -20,11 +20,24 @@
           </svg>
           QRmaxx
         </h1>
-        <p>Type a link or a message. The code is drawn on this page, and your text stays in this browser.</p>
+        <p>Type a link, a message, or a number. The code is drawn on this page, and your text stays in this browser.</p>
       </header>
 
+      <div class="mode">
+        <div class="segmented two" role="radiogroup" aria-label="Symbol">
+          <label class="seg">
+            <input type="radio" name="mode" value="qr" checked>
+            <span>QR code</span>
+          </label>
+          <label class="seg">
+            <input type="radio" name="mode" value="barcode">
+            <span>Barcode</span>
+          </label>
+        </div>
+      </div>
+
       <label class="field">
-        <span class="field-label">Text or link</span>
+        <span class="field-label" id="field-label">Text or link</span>
         <textarea
           id="input"
           rows="2"
@@ -49,7 +62,30 @@
       </div>
 
       <div class="options">
-        <fieldset>
+        <fieldset id="format-options" hidden>
+          <legend>Format</legend>
+          <div class="segmented">
+            <label class="seg">
+              <input type="radio" name="format" value="code128" checked>
+              <span>128</span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="format" value="ean13">
+              <span>EAN</span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="format" value="upca">
+              <span>UPC</span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="format" value="code39">
+              <span>39</span>
+            </label>
+          </div>
+          <p class="hint" id="format-hint"></p>
+        </fieldset>
+
+        <fieldset id="ecc-options">
           <legend>Correction</legend>
           <div class="segmented">
             <label class="seg">
@@ -84,9 +120,17 @@
         </div>
 
         <div class="size">
-          <label class="size-label" for="size">Image size</label>
+          <label class="size-label" id="size-label" for="size">Image size</label>
           <div class="size-control">
             <input id="size" type="number" min="32" max="8192" step="1" value="1024" inputmode="numeric" aria-describedby="size-hint">
+            <span>px</span>
+          </div>
+        </div>
+
+        <div class="size" id="height-row" hidden>
+          <label class="size-label" for="bar-height">Bar height</label>
+          <div class="size-control">
+            <input id="bar-height" type="number" min="40" max="2048" step="1" value="160" inputmode="numeric">
             <span>px</span>
           </div>
         </div>
@@ -98,6 +142,7 @@
       <p>QRmaxx needs JavaScript to draw the code. It still runs entirely in your browser.</p>
     </noscript>
     <script src="vendor/qrcodegen.js"></script>
+    <script src="barcode.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

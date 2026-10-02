@@ -27,20 +27,43 @@
   const MIN_PX = 32;
   const MAX_PX = 8192;
   const DEFAULT_PX = 1024;
+  const MIN_BAR = 40;
+  const MAX_BAR = 2048;
+  const DEFAULT_BAR = 160;
+
+  const FORMAT_HINT = {
+    code128: "Letters, numbers, and symbols.",
+    ean13: "12 or 13 digits. A missing check digit is added.",
+    upca: "11 or 12 digits. A missing check digit is added.",
+    code39: "Uppercase letters, digits, and - . space $ / + %.",
+  };
+
+  const FORMAT_PLACEHOLDER = {
+    code128: "ABC-123",
+    ean13: "5901234123457",
+    upca: "036000291452",
+    code39: "CODE-39",
+  };
 
   const input = document.getElementById("input");
   const stage = document.getElementById("stage");
   const meta = document.getElementById("meta");
   const warn = document.getElementById("warn");
   const hint = document.getElementById("ecc-hint");
+  const formatHint = document.getElementById("format-hint");
   const sizeHint = document.getElementById("size-hint");
+  const sizeLabel = document.getElementById("size-label");
+  const fieldLabel = document.getElementById("field-label");
   const downloadBtn = document.getElementById("download");
   const copyBtn = document.getElementById("copy");
   const inkInput = document.getElementById("ink");
   const paperInput = document.getElementById("paper");
   const sizeInput = document.getElementById("size");
+  const barHeightInput = document.getElementById("bar-height");
 
   let savedSize = DEFAULT_PX;
+  let savedBarHeight = DEFAULT_BAR;
+  let mode = "qr";
 
   let current = null;
   let frame = 0;
@@ -81,6 +104,37 @@
       savedSize = storedSize;
     }
     sizeInput.value = String(savedSize);
+    const storedBar = Number(readStore("qrmaxx.barHeight", String(DEFAULT_BAR)));
+    if (Number.isInteger(storedBar) && storedBar >= MIN_BAR && storedBar <= MAX_BAR) {
+      savedBarHeight = storedBar;
+    }
+    barHeightInput.value = String(savedBarHeight);
+    const storedMode = readStore("qrmaxx.mode", "qr");
+    if (storedMode === "qr" || storedMode === "barcode") mode = storedMode;
+    const modeInput = document.querySelector(`input[name="mode"][value="${mode}"]`);
+    if (modeInput) modeInput.checked = true;
+    const storedFormat = readStore("qrmaxx.format", "code128");
+    const formatInput = document.querySelector(`input[name="format"][value="${storedFormat}"]`);
+    if (formatInput) formatInput.checked = true;
+    applyMode();
+  }
+
+  function selectedFormat() {
+    const checked = document.querySelector('input[name="format"]:checked');
+    const value = checked ? checked.value : "code128";
+    return Object.prototype.hasOwnProperty.call(FORMAT_HINT, value) ? value : "code128";
+  }
+
+  function applyMode() {
+    const barcode = mode === "barcode";
+    document.getElementById("ecc-options").hidden = barcode;
+    document.getElementById("format-options").hidden = !barcode;
+    document.getElementById("height-row").hidden = !barcode;
+    stage.classList.toggle("barcode", barcode);
+    sizeLabel.textContent = barcode ? "Image width" : "Image size";
+    fieldLabel.textContent = barcode ? "Text or number" : "Text or link";
+    input.placeholder = barcode ? FORMAT_PLACEHOLDER[selectedFormat()] : "https://example.com";
+    if (barcode) formatHint.textContent = FORMAT_HINT[selectedFormat()];
   }
 
   function parseSize(raw) {
@@ -95,6 +149,18 @@
     writeStore("qrmaxx.size", String(px));
   }
 
+  function parseBarHeight(raw) {
+    if (!/^\d+$/.test(String(raw).trim())) return null;
+    const n = Number(raw);
+    if (n < MIN_BAR || n > MAX_BAR) return null;
+    return n;
+  }
+
+  function commitBarHeight(px) {
+    savedBarHeight = px;
+    writeStore("qrmaxx.barHeight", String(px));
+  }
+
   function exportPixels(qr) {
     const dim = qr.size + BORDER * 2;
     let scale = Math.max(1, Math.ceil(savedSize / dim));
@@ -107,6 +173,16 @@
   function updateSizeHint() {
     if (!current) {
       sizeHint.textContent = "Width of the saved PNG, from 32 to 8192.";
+      return;
+    }
+    if (current.kind === "barcode") {
+      const exported = barcodeExport(current.symbol);
+      const sharp = exported.width !== savedSize ? " so the bars stay sharp" : "";
+      if (exported.capped) {
+        sizeHint.textContent = `Largest sharp PNG for this code is ${exported.width} × ${exported.height}.`;
+        return;
+      }
+      sizeHint.textContent = `Saves a ${exported.width} × ${exported.height} PNG${sharp}.`;
       return;
     }
     const { px, capped } = exportPixels(current.qr);
@@ -189,6 +265,122 @@
     return canvas;
   }
 
+  function escapeXml(value) {
+    return value.replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&apos;",
+    }[char]));
+  }
+
+  function barcodeModules(symbol) {
+    return symbol.quietLeft + symbol.bits.length + symbol.quietRight;
+  }
+
+  function barcodeScale(symbol) {
+    const modules = barcodeModules(symbol);
+    let scale = Math.max(1, Math.ceil(savedSize / modules));
+    const maxScale = Math.max(1, Math.floor(MAX_PX / modules));
+    const capped = scale > maxScale;
+    if (capped) scale = maxScale;
+    return { scale, width: modules * scale, capped };
+  }
+
+  function barcodeFontSize(text, width, barHeight) {
+    let fontSize = Math.round(Math.min(barHeight * 0.22, 72));
+    fontSize = Math.max(14, fontSize);
+    const widest = Math.max(text.length, 1) * fontSize * 0.62;
+    if (widest > width * 0.92) {
+      fontSize = Math.max(10, Math.floor((width * 0.92) / (text.length * 0.62)));
+    }
+    return fontSize;
+  }
+
+  function barcodePadding() {
+    return Math.max(8, Math.round(savedBarHeight * 0.08));
+  }
+
+  function barcodeExport(symbol) {
+    const scaled = barcodeScale(symbol);
+    const fontSize = barcodeFontSize(symbol.text, scaled.width, savedBarHeight);
+    const pad = barcodePadding();
+    const textBlock = Math.round(fontSize * 2);
+    const height = pad + savedBarHeight + textBlock;
+    return {
+      scale: scaled.scale,
+      width: scaled.width,
+      height,
+      fontSize,
+      pad,
+      textBlock: Math.round(fontSize * 2),
+      capped: scaled.capped,
+    };
+  }
+
+  function barPath(symbol, barHeight) {
+    const bits = symbol.bits;
+    let path = "";
+    let index = 0;
+    while (index < bits.length) {
+      if (bits.charAt(index) !== "1") {
+        index += 1;
+        continue;
+      }
+      let end = index + 1;
+      while (end < bits.length && bits.charAt(end) === "1") end += 1;
+      const x = symbol.quietLeft + index;
+      path += `M${x} 0h${end - index}v${barHeight}h-${end - index}z`;
+      index = end;
+    }
+    return path;
+  }
+
+  function barcodeSvg(symbol, ink, paper) {
+    const exported = barcodeExport(symbol);
+    const modules = barcodeModules(symbol);
+    const barHeight = savedBarHeight / exported.scale;
+    const fontSize = exported.fontSize / exported.scale;
+    const pad = exported.pad / exported.scale;
+    const textBlock = exported.textBlock / exported.scale;
+    const height = exported.height / exported.scale;
+    const textY = pad + barHeight + textBlock / 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${modules} ${height}" role="img" aria-label="${escapeXml(symbol.name)}" shape-rendering="crispEdges"><rect width="${modules}" height="${height}" fill="${paper}"/><path d="${barPath(symbol, barHeight)}" fill="${ink}" transform="translate(0 ${pad})"/><text x="${modules / 2}" y="${textY}" fill="${ink}" text-anchor="middle" dominant-baseline="middle" font-family="Segoe UI, sans-serif" font-size="${fontSize}" font-weight="600">${escapeXml(symbol.text)}</text></svg>`;
+  }
+
+  function drawBarcode(symbol, ink, paper) {
+    const exported = barcodeExport(symbol);
+    const canvas = document.createElement("canvas");
+    canvas.width = exported.width;
+    canvas.height = exported.height;
+    if (canvas.width !== exported.width || canvas.height !== exported.height) {
+      throw new Error("Image is too large for this browser.");
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Image is too large for this browser.");
+    ctx.fillStyle = paper;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = ink;
+    const bits = symbol.bits;
+    let index = 0;
+    while (index < bits.length) {
+      if (bits.charAt(index) !== "1") {
+        index += 1;
+        continue;
+      }
+      let end = index + 1;
+      while (end < bits.length && bits.charAt(end) === "1") end += 1;
+      ctx.fillRect((symbol.quietLeft + index) * exported.scale, exported.pad, (end - index) * exported.scale, savedBarHeight);
+      index = end;
+    }
+    ctx.font = `600 ${exported.fontSize}px "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(symbol.text, exported.width / 2, exported.pad + savedBarHeight + exported.textBlock / 2);
+    return canvas;
+  }
+
   function showMessage(message) {
     current = null;
     const note = document.createElement("p");
@@ -196,6 +388,8 @@
     note.setAttribute("role", "status");
     note.textContent = message;
     stage.replaceChildren(note);
+    stage.classList.remove("has-code");
+    stage.style.background = "";
     meta.textContent = "";
     downloadBtn.disabled = true;
     copyBtn.disabled = true;
@@ -216,10 +410,38 @@
     writeStore("qrmaxx.ecc", eccKey);
     writeStore("qrmaxx.ink", ink);
     writeStore("qrmaxx.paper", paper);
+    writeStore("qrmaxx.mode", mode);
+    if (mode === "barcode") {
+      const format = selectedFormat();
+      writeStore("qrmaxx.format", format);
+      formatHint.textContent = FORMAT_HINT[format];
+      input.placeholder = FORMAT_PLACEHOLDER[format];
+    }
 
     if (text.length === 0) {
       showMessage("The code appears as you type.");
       setWarn("");
+      return;
+    }
+
+    if (mode === "barcode") {
+      let symbol;
+      try {
+        symbol = QrmaxxBarcode.encode(text, selectedFormat());
+      } catch (err) {
+        showMessage(err.userMessage || "That text couldn’t be turned into a barcode.");
+        setWarn("");
+        return;
+      }
+      stage.innerHTML = barcodeSvg(symbol, ink, paper);
+      stage.classList.add("has-code");
+      stage.style.background = paper;
+      meta.textContent = symbol.name;
+      setWarn(colorAdvice(ink, paper));
+      current = { kind: "barcode", symbol, ink, paper };
+      updateSizeHint();
+      downloadBtn.disabled = false;
+      copyBtn.disabled = false;
       return;
     }
 
@@ -239,13 +461,29 @@
     }
 
     stage.innerHTML = toSvg(qr, ink, paper);
+    stage.classList.remove("has-code");
+    stage.style.background = "";
     const count = text.length === 1 ? "1 character" : `${text.length} characters`;
     meta.textContent = `${count} · ${ECC_NAME[eccKey]} correction`;
     setWarn(colorAdvice(ink, paper));
-    current = { qr, ink, paper };
+    current = { kind: "qr", qr, ink, paper };
     updateSizeHint();
     downloadBtn.disabled = false;
     copyBtn.disabled = false;
+  }
+
+  function raster() {
+    if (!current) return null;
+    if (current.kind === "barcode") return drawBarcode(current.symbol, current.ink, current.paper);
+    return drawCanvas(current.qr, current.ink, current.paper);
+  }
+
+  function fileName() {
+    if (current.kind === "barcode") {
+      const exported = barcodeExport(current.symbol);
+      return `barcode-${exported.width}x${exported.height}.png`;
+    }
+    return `qrmaxx-${exportPixels(current.qr).px}.png`;
   }
 
   function schedule() {
@@ -271,11 +509,11 @@
 
   async function download() {
     if (!current) return;
-    const blob = await canvasBlob(drawCanvas(current.qr, current.ink, current.paper));
+    const blob = await canvasBlob(raster());
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `qrmaxx-${exportPixels(current.qr).px}.png`;
+    link.download = fileName();
     document.body.append(link);
     link.click();
     link.remove();
@@ -296,7 +534,7 @@
     clearTimeout(copyTimer);
     copyBtn.textContent = "Copying…";
     try {
-      const blob = await canvasBlob(drawCanvas(current.qr, current.ink, current.paper));
+      const blob = await canvasBlob(raster());
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       flashCopy("Copied");
     } catch (err) {
@@ -321,6 +559,34 @@
   });
   document.querySelectorAll('input[name="ecc"]').forEach((el) => {
     el.addEventListener("change", schedule);
+  });
+  document.querySelectorAll('input[name="mode"]').forEach((el) => {
+    el.addEventListener("change", () => {
+      mode = el.value === "barcode" ? "barcode" : "qr";
+      applyMode();
+      schedule();
+    });
+  });
+  document.querySelectorAll('input[name="format"]').forEach((el) => {
+    el.addEventListener("change", schedule);
+  });
+  barHeightInput.addEventListener("input", () => {
+    const px = parseBarHeight(barHeightInput.value);
+    if (px != null) commitBarHeight(px);
+    updateSizeHint();
+    if (current && current.kind === "barcode") schedule();
+  });
+  barHeightInput.addEventListener("blur", () => {
+    const raw = String(barHeightInput.value).trim();
+    if (/^\d+$/.test(raw)) {
+      const px = Math.min(MAX_BAR, Math.max(MIN_BAR, Number(raw)));
+      commitBarHeight(px);
+      barHeightInput.value = String(px);
+    } else {
+      barHeightInput.value = String(savedBarHeight);
+    }
+    updateSizeHint();
+    if (mode === "barcode") schedule();
   });
   inkInput.addEventListener("input", schedule);
   paperInput.addEventListener("input", schedule);

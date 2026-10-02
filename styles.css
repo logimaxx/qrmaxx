@@ -164,6 +164,18 @@ input[type="number"]:focus-visible {
   height: 100%;
 }
 
+.stage.barcode {
+  aspect-ratio: 2.6 / 1;
+}
+
+.stage.barcode.has-code {
+  aspect-ratio: auto;
+}
+
+.stage.barcode svg {
+  height: auto;
+}
+
 .empty {
   margin: 0;
   padding: 1.5rem 1.75rem;
@@ -253,12 +265,24 @@ legend {
   padding: 0;
 }
 
+.mode {
+  margin-top: 1.35rem;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   padding: 0.2rem;
   border-radius: 999px;
   background: var(--track);
+}
+
+.segmented.two {
+  grid-template-columns: 1fr 1fr;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .seg {
